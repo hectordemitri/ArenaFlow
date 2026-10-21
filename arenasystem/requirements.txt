@@ -10,7 +10,7 @@ psycopg[binary]==3.2.1
 whitenoise==6.7.0
 drf-spectacular==0.27.2
 drf-spectacular-sidecar==2024.7.1
-celery==5.5.3
+celery==5.6.3
 redis==6.4.0
 sentry-sdk>=2.20,<3
 cryptography>=44,<51
