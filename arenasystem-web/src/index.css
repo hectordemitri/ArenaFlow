@@ -1,6 +1,15 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+/* Preserve v3 sizing and interaction defaults while updating the compiler. */
+@theme {
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --radius-sm: 0.125rem;
+  --blur-sm: 4px;
+  --blur: 8px;
+  --default-ring-width: 3px;
+  --default-ring-color: #3b82f6;
+}
 
 :root {
   --arena-primary: #0f766e;
@@ -27,6 +36,12 @@
 @layer base {
   * {
     box-sizing: border-box;
+    border-color: #e5e7eb;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
   }
 
   body {

@@ -3,7 +3,7 @@ from datetime import timedelta
 from threading import Barrier
 from unittest import skipUnless
 
-from django.db import connection, close_old_connections
+from django.db import connection, connections, close_old_connections
 from django.test import TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -32,7 +32,7 @@ class RealConcurrencyTests(TransactionTestCase):
                 barrier.wait(timeout=10)
                 return client.post(endpoint, payload, format='json').status_code
             finally:
-                close_old_connections()
+                connections.close_all()
         with ThreadPoolExecutor(max_workers=2) as pool:
             return sorted(pool.map(submit, self.users))
 

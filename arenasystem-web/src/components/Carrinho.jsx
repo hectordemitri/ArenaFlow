@@ -49,7 +49,7 @@ function Carrinho({ aberto, onFechar, onPedidoCriado }) {
     <>
       {/* Overlay escuro */}
       <div
-        className="fixed inset-0 z-40 bg-black bg-opacity-40 animate-fade-in"
+        className="fixed inset-0 z-40 bg-black/40 animate-fade-in"
         onClick={onFechar}
       />
 

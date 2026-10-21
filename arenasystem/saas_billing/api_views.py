@@ -42,7 +42,7 @@ def _subscription(request, lock=False):
     arena = get_user_arena(request.user)
     queryset = SaasSubscription.objects.select_related('arena', 'plan', 'pending_plan')
     if lock:
-        queryset = queryset.select_for_update()
+        queryset = queryset.select_for_update(of=('self',))
     subscription = queryset.filter(arena=arena).first()
     return subscription or ensure_subscription(arena)
 

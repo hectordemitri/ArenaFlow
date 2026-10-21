@@ -281,7 +281,7 @@ def reconcile_subscription_lifecycle(now=None):
     now = now or timezone.now()
     changed = {'past_due': 0, 'suspended': 0, 'canceled': 0, 'renewed_plan': 0}
     with transaction.atomic():
-        for subscription in SaasSubscription.objects.select_for_update().select_related('plan', 'pending_plan'):
+        for subscription in SaasSubscription.objects.select_for_update(of=('self',)).select_related('plan', 'pending_plan'):
             dirty = []
             if subscription.status == 'trialing' and subscription.trial_ends_at and subscription.trial_ends_at <= now:
                 subscription.status = 'past_due'

@@ -30,7 +30,7 @@ function SidebarAdmin() {
   const itens = adminNavigationFor(usuario, { terms, features, hasTenantContext: Boolean(contexto) });
 
   return (
-    <aside className="hidden min-h-screen w-64 flex-shrink-0 flex-col border-r border-slate-900 bg-slate-950 text-slate-100 md:flex">
+    <aside className="hidden min-h-screen w-64 shrink-0 flex-col border-r border-slate-900 bg-slate-950 text-slate-100 md:flex">
       <div className="border-b border-white/10 p-4">
         <h1 className="flex items-center gap-3 font-bold">
           <span className="brand-mark h-10 w-10 rounded-lg">

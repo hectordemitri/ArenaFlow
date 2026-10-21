@@ -1,8 +1,10 @@
 from datetime import timedelta
+from io import BytesIO
 
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from PIL import Image
 
 from common_validators import validate_image_upload
 
@@ -23,6 +25,19 @@ from gestao.models import AuditLog
 
 
 class UploadSecurityTests(TestCase):
+    def test_accepts_supported_images_and_preserves_file_position(self):
+        for image_format, extension, mime in [
+            ('PNG', 'png', 'image/png'),
+            ('JPEG', 'jpg', 'image/jpeg'),
+            ('WEBP', 'webp', 'image/webp'),
+        ]:
+            with self.subTest(image_format=image_format):
+                buffer = BytesIO()
+                Image.new('RGB', (8, 8), 'green').save(buffer, format=image_format)
+                image = SimpleUploadedFile(f'perfil.{extension}', buffer.getvalue(), content_type=mime)
+                validate_image_upload(image)
+                self.assertEqual(image.tell(), 0)
+
     def test_rejeita_arquivo_falso_como_imagem(self):
         arquivo = SimpleUploadedFile(
             'perfil.jpg',
