@@ -1,7 +1,7 @@
 Django==5.2.17
 Pillow==13.0.0
 python-decouple==3.8
-djangorestframework==3.17.2
+djangorestframework==3.18.3
 djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.3.1
 dj-database-url==2.2.0
