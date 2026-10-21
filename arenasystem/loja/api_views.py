@@ -1,6 +1,6 @@
 from django.db import transaction
 from django.db.models import Q
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions, status, serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Categoria, Fornecedor, LoteEstoque, MovimentacaoEstoque, Produto, Venda
@@ -16,6 +16,7 @@ from arena.tenant import get_user_arena
 from arena.features import FeatureEnabledMixin
 from gestao.audit import registrar_auditoria
 from usuarios.permissions import require_permission
+from .stock import record_change, remove_stock
 
 
 class CategoriaViewSet(FeatureEnabledMixin, viewsets.ReadOnlyModelViewSet):
@@ -65,56 +66,38 @@ class AdminProdutoViewSet(FeatureEnabledMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(arena=get_user_arena(self.request.user))
 
+    def _locked_product(self):
+        product = self.get_object()
+        return Produto.objects.select_for_update().get(pk=product.pk)
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        product = Produto.objects.select_for_update().get(pk=serializer.instance.pk)
+        if 'estoque' in serializer.validated_data and serializer.validated_data['estoque'] != product.estoque:
+            raise serializers.ValidationError({'estoque': 'Use a operacao de ajuste para alterar o saldo.'})
+        serializer.instance = product
+        serializer.save()
+
     def _registrar_movimentacao(self, produto, tipo, quantidade, observacao='', lote=None, custo_unitario=None):
         estoque_antes = produto.estoque
-        estoque_depois = estoque_antes + quantidade
-        if estoque_depois < 0:
-            raise ValueError('Estoque insuficiente.')
-        produto.estoque = estoque_depois
-        produto.save(update_fields=['estoque'])
-        mov = MovimentacaoEstoque.objects.create(
-            arena=get_user_arena(self.request.user),
-            produto=produto,
-            lote=lote,
-            tipo=tipo,
-            quantidade=quantidade,
-            estoque_antes=estoque_antes,
-            estoque_depois=estoque_depois,
-            valor_unitario=produto.preco,
-            custo_unitario=custo_unitario if custo_unitario is not None else produto.custo_unitario,
-            observacao=observacao,
-            criado_por=self.request.user,
-        )
+        mov = record_change(produto, quantidade, tipo, self.request.user, lot=lote, note=observacao, cost=custo_unitario)
         registrar_auditoria(
             self.request,
             get_user_arena(self.request.user),
             'estoque.movimentacao',
             mov,
             anteriores={'estoque': estoque_antes},
-            novos={'estoque': estoque_depois, 'quantidade': quantidade, 'tipo': tipo},
+            novos={'estoque': produto.estoque, 'quantidade': quantidade, 'tipo': tipo},
         )
 
-    def _baixar_lotes(self, produto, quantidade):
-        restante = quantidade
-        lotes = produto.lotes.filter(quantidade_atual__gt=0).order_by('validade', 'criado_em')
-        ultimo_lote = None
-        for lote in lotes:
-            if restante <= 0:
-                break
-            baixa = min(lote.quantidade_atual, restante)
-            lote.quantidade_atual -= baixa
-            lote.save(update_fields=['quantidade_atual'])
-            restante -= baixa
-            ultimo_lote = lote
-        return ultimo_lote
-
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def entrada(self, request, pk=None):
-        produto = self.get_object()
-        quantidade = int(request.data.get('quantidade', 0))
-        if quantidade <= 0:
-            return Response({'detail': 'Quantidade deve ser maior que zero.'}, status=status.HTTP_400_BAD_REQUEST)
-        custo_unitario = request.data.get('custo_unitario') or produto.custo_unitario
+        produto = self._locked_product()
+        quantidade = serializers.IntegerField(min_value=1).run_validation(request.data.get('quantidade'))
+        custo_unitario = serializers.DecimalField(max_digits=8, decimal_places=2, min_value=0).run_validation(
+            request.data.get('custo_unitario', produto.custo_unitario))
+        validade = serializers.DateField(allow_null=True).run_validation(request.data.get('validade') or None)
         fornecedor_id = request.data.get('fornecedor') or produto.fornecedor_id
         arena = get_user_arena(self.request.user)
         if fornecedor_id and not Fornecedor.objects.filter(arena=arena, id=fornecedor_id).exists():
@@ -126,7 +109,7 @@ class AdminProdutoViewSet(FeatureEnabledMixin, viewsets.ModelViewSet):
             quantidade_inicial=quantidade,
             quantidade_atual=quantidade,
             custo_unitario=custo_unitario,
-            validade=request.data.get('validade') or None,
+            validade=validade,
             fornecedor_id=fornecedor_id or None,
         )
         self._registrar_movimentacao(
@@ -140,27 +123,34 @@ class AdminProdutoViewSet(FeatureEnabledMixin, viewsets.ModelViewSet):
         return Response({'detail': 'Entrada registrada.', 'estoque': produto.estoque})
 
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def ajuste(self, request, pk=None):
-        produto = self.get_object()
-        novo_estoque = int(request.data.get('estoque', produto.estoque))
+        produto = self._locked_product()
+        novo_estoque = serializers.IntegerField(min_value=0).run_validation(request.data.get('estoque'))
         quantidade = novo_estoque - produto.estoque
+        if quantidade < 0:
+            # Inventory corrections may remove expired stock too.
+            restante = -quantidade
+            for lote in produto.lotes.select_for_update().filter(quantidade_atual__gt=0).order_by('pk'):
+                baixa = min(lote.quantidade_atual, restante)
+                lote.quantidade_atual -= baixa
+                lote.save(update_fields=['quantidade_atual'])
+                restante -= baixa
+                if not restante:
+                    break
         self._registrar_movimentacao(produto, 'ajuste', quantidade, request.data.get('observacao', 'Ajuste manual'))
         return Response({'detail': 'Estoque ajustado.', 'estoque': produto.estoque})
 
     @action(detail=True, methods=['post'], url_path='venda-balcao')
     @transaction.atomic
     def venda_balcao(self, request, pk=None):
-        produto = self.get_object()
+        produto = self._locked_product()
         if produto.canal == 'app':
             return Response({'detail': 'Produto exclusivo do app.'}, status=status.HTTP_400_BAD_REQUEST)
-        quantidade = int(request.data.get('quantidade', 1))
-        if quantidade <= 0:
-            return Response({'detail': 'Quantidade deve ser maior que zero.'}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            lote = self._baixar_lotes(produto, quantidade)
-            self._registrar_movimentacao(produto, 'venda_balcao', -quantidade, 'Venda no balcao', lote=lote)
-        except ValueError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        quantidade = serializers.IntegerField(min_value=1).run_validation(request.data.get('quantidade', 1))
+        remove_stock(produto, quantidade, 'venda_balcao', request.user, 'Venda no balcao')
+        registrar_auditoria(request, get_user_arena(request.user), 'estoque.venda_balcao', produto,
+                            novos={'quantidade': quantidade, 'estoque': produto.estoque})
         return Response({'detail': 'Venda de balcao registrada.', 'estoque': produto.estoque})
 
 

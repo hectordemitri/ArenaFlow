@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import api from '../../api/client';
 import Toast from '../../components/Toast';
 import useDebounce from '../../hooks/useDebounce';
+import PaymentConnection from '../../components/admin/PaymentConnection';
 import { formatarData, formatarMoeda } from '../../utils/format';
 
 const filtros = [
@@ -10,6 +11,8 @@ const filtros = [
   { key: 'atrasado', label: 'Atrasadas' },
   { key: 'pago', label: 'Pagas' },
   { key: 'cancelada', label: 'Canceladas' },
+  { key: 'estornada', label: 'Estornadas' },
+  { key: 'contestada', label: 'Contestadas' },
 ];
 
 const periodos = [
@@ -110,6 +113,7 @@ function MensalidadesAdmin() {
         </button>
       </div>
 
+      <PaymentConnection />
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Resumo titulo="Total listado" valor={formatarMoeda(totais.total)} />
         <Resumo titulo="Pago" valor={formatarMoeda(totais.pago)} cor="green" />
@@ -286,6 +290,8 @@ function StatusBadge({ status, label }) {
     pendente: 'bg-cyan-100 text-cyan-700',
     atrasado: 'bg-red-100 text-red-700',
     cancelada: 'bg-gray-200 text-gray-700',
+    estornada: 'bg-slate-100 text-slate-700',
+    contestada: 'bg-red-100 text-red-700',
   };
 
   return (

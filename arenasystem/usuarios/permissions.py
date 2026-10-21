@@ -59,6 +59,8 @@ def papel_usuario(user):
 
 def tem_permissao(user, permissao):
     papel = papel_usuario(user)
+    if permissao.startswith('saas.'):
+        return papel == 'superadmin_saas'
     permissoes = PERMISSOES_POR_PAPEL.get(papel, set())
     base_allowed = '*' in permissoes or permissao in permissoes
     if papel == 'dono' and permissao in {'subscription.manage', 'ownership.transfer', 'usuarios.manage'}:

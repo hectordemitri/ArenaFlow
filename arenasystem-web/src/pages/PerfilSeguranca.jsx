@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import api from '../api/client';
+import MfaSettings from '../components/MfaSettings';
 import ProfilePage, { Field, InlineMessage } from '../components/profile/ProfilePage';
 import { apiErrorMessage, apiFieldErrors } from '../utils/apiErrors';
 
@@ -38,6 +39,7 @@ export default function PerfilSeguranca() {
     <ProfilePage title="Privacidade e segurança" subtitle="Proteja sua conta com uma senha exclusiva e encerre acessos que você não reconhece.">
       {message && <div className="mb-4"><InlineMessage type={message.type}>{message.text}</InlineMessage></div>}
       <div className="space-y-5">
+        <MfaSettings />
         <form onSubmit={changePassword} className="app-surface space-y-4 p-5">
           <div><h2 className="font-black text-slate-950">Alterar senha</h2><p className="mt-1 text-xs leading-5 text-slate-500">A nova senha passa pelos validadores de segurança do ArenaFlow.</p></div>
           <Field label="Senha atual" type="password" value={form.current_password} onChange={update('current_password')} autoComplete="current-password" required error={errors.current_password} />

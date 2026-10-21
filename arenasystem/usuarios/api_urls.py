@@ -2,6 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .api_views import UsuarioViewSet, CadastroAlunoView
 from .api_views import AdminAlunoViewSet
+from .mfa_views import mfa_settings
 from .account_views import (
     InvitationViewSet, TeamUserViewSet, accept_user_invitation, change_password,
     confirm_email_change, confirm_password_reset, logout_all, logout_current, logout_others,
@@ -15,6 +16,7 @@ router.register(r'admin/team/users', TeamUserViewSet, basename='team-users')
 router.register(r'admin/team/invitations', InvitationViewSet, basename='team-invitations')
 
 urlpatterns = [
+    path('auth/mfa/', mfa_settings, name='mfa-settings'),
     path('auth/register/', CadastroAlunoView.as_view(), name='cadastro_aluno'),
     path('auth/invitations/accept/', accept_user_invitation, name='accept-user-invitation'),
     path('auth/password-reset/request/', request_password_reset, name='request-password-reset'),

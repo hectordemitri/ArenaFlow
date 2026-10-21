@@ -11,7 +11,9 @@ def csv_config(name, default=''):
 
 
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-troque-isso')
+APP_ENCRYPTION_KEYS = csv_config('APP_ENCRYPTION_KEYS')
 DEBUG = config('DEBUG', default=True, cast=bool)
+SUPERADMIN_REQUIRE_MFA = config('SUPERADMIN_REQUIRE_MFA', default=not DEBUG, cast=bool)
 DEMO_MODE = config('DEMO_MODE', default=DEBUG, cast=bool)
 DEMO_ADMIN_PASSWORD = config('DEMO_ADMIN_PASSWORD', default='')
 DEFAULT_ARENA_SLUG = config('DEFAULT_ARENA_SLUG', default='arenasystem-demo')
@@ -24,7 +26,7 @@ if not DEBUG:
         raise ImproperlyConfigured('ALLOWED_HOSTS deve ser restrito em producao.')
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
+    'arenasystem.apps.ArenaFlowAdminConfig',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -124,7 +126,35 @@ STORAGES = {
     'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
     'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage'},
 }
+MEDIA_STORAGE_BUCKET = config('MEDIA_STORAGE_BUCKET', default='')
+BACKUP_STORAGE_BUCKET = config('BACKUP_STORAGE_BUCKET', default='')
+if MEDIA_STORAGE_BUCKET:
+    STORAGES['default'] = {
+        'BACKEND': 'storages.backends.s3.S3Storage',
+        'OPTIONS': {
+            'bucket_name': MEDIA_STORAGE_BUCKET,
+            'access_key': config('MEDIA_STORAGE_ACCESS_KEY', default=None),
+            'secret_key': config('MEDIA_STORAGE_SECRET_KEY', default=None),
+            'region_name': config('MEDIA_STORAGE_REGION', default='us-east-1'),
+            'endpoint_url': config('MEDIA_STORAGE_ENDPOINT', default=None),
+            'default_acl': None, 'querystring_auth': True, 'querystring_expire': 900,
+            'file_overwrite': False, 'custom_domain': None,
+        },
+    }
 MEDIA_URL = 'media/'
+if BACKUP_STORAGE_BUCKET:
+    STORAGES['backups'] = {
+        'BACKEND': 'storages.backends.s3.S3Storage',
+        'OPTIONS': {
+            'bucket_name': BACKUP_STORAGE_BUCKET,
+            'access_key': config('BACKUP_STORAGE_ACCESS_KEY', default=None),
+            'secret_key': config('BACKUP_STORAGE_SECRET_KEY', default=None),
+            'region_name': config('BACKUP_STORAGE_REGION', default='us-east-1'),
+            'endpoint_url': config('BACKUP_STORAGE_ENDPOINT', default=None),
+            'default_acl': None, 'querystring_auth': True, 'file_overwrite': False,
+            'custom_domain': None,
+        },
+    }
 MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -152,6 +182,7 @@ REST_FRAMEWORK = {
         'auth_register': config('THROTTLE_AUTH_REGISTER', default='5/hour'),
         'account_security': config('THROTTLE_ACCOUNT_SECURITY', default='10/hour'),
         'saas_webhook': config('THROTTLE_SAAS_WEBHOOK', default='120/min'),
+        'student_webhook': config('THROTTLE_STUDENT_WEBHOOK', default='120/min'),
     },
 }
 
@@ -172,7 +203,7 @@ CORS_ALLOWED_ORIGINS = csv_config(
 )
 CSRF_TRUSTED_ORIGINS = csv_config('CSRF_TRUSTED_ORIGINS')
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_HEADERS = (*default_headers, 'x-arena-id', 'x-arena-access-reason', 'x-frontend-route')
+CORS_ALLOW_HEADERS = (*default_headers, 'x-arena-id', 'x-arena-access-reason', 'x-frontend-route', 'x-idempotency-key')
 
 if not DEBUG and any(origin == '*' for origin in CORS_ALLOWED_ORIGINS):
     raise ImproperlyConfigured('CORS_ALLOWED_ORIGINS nao pode usar wildcard em producao.')
@@ -187,17 +218,31 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') if config('USE_X_F
 
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 PUBLIC_BACKEND_URL = config('PUBLIC_BACKEND_URL', default='http://127.0.0.1:8000')
-MERCADO_PAGO_ACCESS_TOKEN = config('MERCADO_PAGO_ACCESS_TOKEN', default='')
+MERCADO_PAGO_CLIENT_ID = config('MERCADO_PAGO_CLIENT_ID', default='')
+MERCADO_PAGO_CLIENT_SECRET = config('MERCADO_PAGO_CLIENT_SECRET', default='')
+MERCADO_PAGO_REDIRECT_URI = config('MERCADO_PAGO_REDIRECT_URI', default='')
+MERCADO_PAGO_WEBHOOK_SECRET = config('MERCADO_PAGO_WEBHOOK_SECRET', default='')
 MERCADO_PAGO_SAAS_ACCESS_TOKEN = config('MERCADO_PAGO_SAAS_ACCESS_TOKEN', default='')
 MERCADO_PAGO_SAAS_WEBHOOK_SECRET = config('MERCADO_PAGO_SAAS_WEBHOOK_SECRET', default='')
 MERCADO_PAGO_SAAS_COLLECTOR_ID = config('MERCADO_PAGO_SAAS_COLLECTOR_ID', default='')
 
 CELERY_BROKER_URL = config('REDIS_URL', default='redis://127.0.0.1:6379/0')
+CACHE_REDIS_URL = config('CACHE_REDIS_URL', default=config('REDIS_URL', default=''))
+if CACHE_REDIS_URL:
+    CACHES = {'default': {'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+                          'LOCATION': CACHE_REDIS_URL, 'KEY_PREFIX': 'arenaflow',
+                          'OPTIONS': {'socket_connect_timeout': 2, 'socket_timeout': 2}}}
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default=CELERY_BROKER_URL)
 CELERY_TASK_ALWAYS_EAGER = config('CELERY_TASK_ALWAYS_EAGER', default=DEBUG, cast=bool)
 CELERY_TASK_EAGER_PROPAGATES = True
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULE = {
+    'generate-student-dues-hourly': {
+        'task': 'arena.tasks.generate_student_dues', 'schedule': 3600.0,
+    },
+    'reconcile-student-payments-every-ten-minutes': {
+        'task': 'arena.tasks.reconcile_student_payments', 'schedule': 600.0,
+    },
     'generate-class-occurrences-hourly': {
         'task': 'aulas.tasks.generate_daily_occurrences',
         'schedule': 3600.0,
@@ -227,6 +272,12 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': 86400.0,
     },
 }
+
+if BACKUP_STORAGE_BUCKET:
+    CELERY_IMPORTS = ('saas_ops.tasks_backup',)
+    CELERY_BEAT_SCHEDULE['backup-database-daily'] = {
+        'task': 'saas_ops.tasks_backup.backup_database', 'schedule': 86400.0,
+    }
 
 LOGGING = {
     'version': 1,

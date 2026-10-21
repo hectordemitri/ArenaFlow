@@ -10,6 +10,17 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: arenaflow
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: arenaflow_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U arenaflow -d arenaflow_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     defaults:
       run:
         working-directory: arenasystem
@@ -17,6 +28,7 @@ jobs:
       DEBUG: "True"
       DEMO_MODE: "True"
       CELERY_TASK_ALWAYS_EAGER: "True"
+      DATABASE_URL: postgresql://arenaflow:ci-only-password@localhost:5432/arenaflow_ci
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -27,7 +39,7 @@ jobs:
       - run: pip install -r requirements.txt pip-audit
       - run: python manage.py check
       - run: python manage.py makemigrations --check --dry-run
-      - run: python manage.py test
+      - run: python manage.py test --settings=arenasystem.settings_test --noinput
       - run: pip check
       - run: pip-audit -r requirements.txt
 
@@ -48,3 +60,24 @@ jobs:
       - run: npm run test
       - run: npm run build
       - run: npm audit --audit-level=high
+
+  browser:
+    runs-on: ubuntu-latest
+    env:
+      DEBUG: "True"
+      E2E_REAL_API: "1"
+    defaults:
+      run:
+        working-directory: arenasystem-web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - run: pip install -r ../arenasystem/requirements.txt
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

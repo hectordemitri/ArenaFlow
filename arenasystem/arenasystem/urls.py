@@ -17,10 +17,6 @@ urlpatterns = [
     # Painel admin
     path('admin/', admin.site.urls),
 
-    # Templates antigos (mantém)
-    path('aulas/', include('aulas.urls')),
-    path('dashboard/', include('dashboard.urls')),
-
     # ───── API REST ─────
     # Autenticação
     path('api/auth/login/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),

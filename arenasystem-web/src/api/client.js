@@ -6,10 +6,12 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api
 // Cliente axios pre-configurado para falar com o Django.
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 20000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+let refreshPromise = null;
 
 const PUBLIC_ENDPOINTS = [
   '/auth/login/',
@@ -48,20 +50,33 @@ api.interceptors.response.use(
 
     if (
       error.response?.status === 401
-      && !originalRequest._retry
+      && originalRequest && !originalRequest._retry
       && !isPublicEndpoint(originalRequest.url)
     ) {
       originalRequest._retry = true;
+      const currentAccess = localStorage.getItem('access_token');
+      if (currentAccess && originalRequest.headers.Authorization !== `Bearer ${currentAccess}`) {
+        originalRequest.headers.Authorization = `Bearer ${currentAccess}`;
+        return api(originalRequest);
+      }
       const refresh = localStorage.getItem('refresh_token');
 
       if (refresh) {
         try {
-          const { data } = await axios.post(`${API_BASE_URL}/auth/refresh/`, { refresh });
-          localStorage.setItem('access_token', data.access);
-          if (data.refresh) localStorage.setItem('refresh_token', data.refresh);
+          if (!refreshPromise) {
+            refreshPromise = axios.post(`${API_BASE_URL}/auth/refresh/`, { refresh }, { timeout: 15000 })
+              .then(({ data }) => {
+                if (localStorage.getItem('refresh_token') !== refresh) throw new axios.CanceledError('A sessao foi alterada.');
+                localStorage.setItem('access_token', data.access);
+                if (data.refresh) localStorage.setItem('refresh_token', data.refresh);
+                return data;
+              }).finally(() => { refreshPromise = null; });
+          }
+          const data = await refreshPromise;
           originalRequest.headers.Authorization = `Bearer ${data.access}`;
           return api(originalRequest);
-        } catch {
+        } catch (refreshError) {
+          if (!refreshError.response || refreshError.response.status >= 500) return Promise.reject(refreshError);
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
           clearArenaContext();

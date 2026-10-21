@@ -14,7 +14,7 @@ test('perfil abre as quatro áreas funcionais no mobile', async ({ page }) => {
     localStorage.setItem('access_token', 'e2e-access');
     localStorage.setItem('refresh_token', 'e2e-refresh');
   });
-  await page.route('http://127.0.0.1:8000/api/**', async (route) => {
+  await page.route('http://127.0.0.1:*/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     const body = path.endsWith('/usuarios/me/') ? user
       : path.endsWith('/arena/atual/') ? { id: 1, nome: 'Arena Demo', slug: 'arena-demo', cor_primaria: '#0f766e', cor_secundaria: '#22c55e' }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useCarrinho } from '../contexts/useCarrinho';
 import { formatarMoeda } from '../utils/format';
 import api from '../api/client';
@@ -6,9 +6,12 @@ import api from '../api/client';
 function Carrinho({ aberto, onFechar, onPedidoCriado }) {
   const { itens, alterarQuantidade, remover, limpar, totalValor } = useCarrinho();
   const [enviando, setEnviando] = useState(false);
+  const submission = useRef(null);
+  const sending = useRef(false);
 
   const finalizar = async () => {
-    if (itens.length === 0) return;
+    if (itens.length === 0 || sending.current) return;
+    sending.current = true;
 
     setEnviando(true);
     try {
@@ -20,7 +23,14 @@ function Carrinho({ aberto, onFechar, onPedidoCriado }) {
         })),
       };
 
-      const { data } = await api.post('/vendas/', payload);
+      const fingerprint = JSON.stringify(payload);
+      if (submission.current?.fingerprint !== fingerprint) {
+        submission.current = { fingerprint, key: crypto.randomUUID() };
+      }
+      const { data } = await api.post('/vendas/', payload, {
+        headers: { 'X-Idempotency-Key': submission.current.key },
+      });
+      submission.current = null;
       limpar();
       onFechar();
       onPedidoCriado?.(data);
@@ -28,6 +38,7 @@ function Carrinho({ aberto, onFechar, onPedidoCriado }) {
       const msg = err.response?.data?.detail || 'Erro ao finalizar pedido';
       onPedidoCriado?.({ erro: msg });
     } finally {
+      sending.current = false;
       setEnviando(false);
     }
   };

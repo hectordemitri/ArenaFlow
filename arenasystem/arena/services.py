@@ -1,10 +1,12 @@
 import json
 import secrets
+import uuid
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from django.conf import settings
+from django.utils import timezone
 from django.utils.text import slugify
 
 
@@ -66,18 +68,18 @@ def criar_dados_iniciais_arena(arena, dados_admin=None):
     return None
 
 
-def _access_token():
-    token = getattr(settings, 'MERCADO_PAGO_ACCESS_TOKEN', '')
-    if not token:
-        raise MercadoPagoConfigError('Configure MERCADO_PAGO_ACCESS_TOKEN no .env.')
-    return token
+def _access_token(arena):
+    from .payment_accounts import access_token_for
+    return access_token_for(arena)
 
 
-def _request_json(method, url, payload=None):
+def _request_json(method, url, payload=None, *, arena, idempotency_key=None):
     headers = {
-        'Authorization': f'Bearer {_access_token()}',
+        'Authorization': f'Bearer {_access_token(arena)}',
         'Content-Type': 'application/json',
     }
+    if idempotency_key:
+        headers['X-Idempotency-Key'] = idempotency_key
     data = json.dumps(payload).encode('utf-8') if payload is not None else None
     request = Request(url, data=data, headers=headers, method=method)
 
@@ -85,15 +87,18 @@ def _request_json(method, url, payload=None):
         with urlopen(request, timeout=20) as response:
             return json.loads(response.read().decode('utf-8'))
     except HTTPError as exc:
-        detalhe = exc.read().decode('utf-8', errors='ignore')
-        raise MercadoPagoAPIError(f'Mercado Pago retornou {exc.code}: {detalhe}') from exc
-    except URLError as exc:
-        raise MercadoPagoAPIError(f'Erro ao conectar ao Mercado Pago: {exc.reason}') from exc
+        raise MercadoPagoAPIError(f'Mercado Pago indisponivel para esta operacao (HTTP {exc.code}).') from exc
+    except (URLError, TimeoutError, ValueError) as exc:
+        raise MercadoPagoAPIError('Nao foi possivel consultar o Mercado Pago. Tente novamente.') from exc
 
 
 def criar_preferencia_mensalidade(mensalidade):
     aluno = mensalidade.matricula.aluno
-    external_reference = mensalidade.external_reference or f'mensalidade:{mensalidade.id}'
+    external_reference = mensalidade.external_reference or f'mensalidade:{mensalidade.arena_id}:{uuid.uuid4()}'
+    # Persist the reference before the external call so a retry keeps the same identity.
+    mensalidade.external_reference = external_reference
+    mensalidade.save(update_fields=['external_reference'])
+    expires_at = timezone.now() + timezone.timedelta(hours=24)
 
     payload = {
         'items': [
@@ -116,8 +121,12 @@ def criar_preferencia_mensalidade(mensalidade):
             'pending': f'{settings.FRONTEND_URL}/mensalidades',
             'failure': f'{settings.FRONTEND_URL}/mensalidades',
         },
-        'notification_url': f'{settings.PUBLIC_BACKEND_URL}/api/mercado-pago/webhook/',
+        'notification_url': f'{settings.PUBLIC_BACKEND_URL}/api/mercado-pago/webhook/{mensalidade.arena_id}/',
         'external_reference': external_reference,
+        'metadata': {'arena_id': mensalidade.arena_id, 'mensalidade_id': mensalidade.id},
+        'expires': True,
+        'expiration_date_from': timezone.now().isoformat(),
+        'expiration_date_to': expires_at.isoformat(),
         'auto_return': 'approved',
         'payment_methods': {
             'installments': 1,
@@ -128,6 +137,8 @@ def criar_preferencia_mensalidade(mensalidade):
         'POST',
         'https://api.mercadopago.com/checkout/preferences',
         payload,
+        arena=mensalidade.arena,
+        idempotency_key=f'{external_reference}:{expires_at:%Y-%m-%d}',
     )
 
     mensalidade.external_reference = external_reference
@@ -137,18 +148,22 @@ def criar_preferencia_mensalidade(mensalidade):
         or preference.get('sandbox_init_point')
         or ''
     )
+    mensalidade.checkout_expires_at = expires_at
     mensalidade.save(update_fields=[
         'external_reference',
         'mercado_pago_preference_id',
         'mercado_pago_checkout_url',
+        'checkout_expires_at',
     ])
     return mensalidade.mercado_pago_checkout_url
 
 
-def obter_pagamento(payment_id):
-    return _request_json('GET', f'https://api.mercadopago.com/v1/payments/{payment_id}')
+def obter_pagamento(payment_id, arena):
+    if not str(payment_id).isdigit():
+        raise MercadoPagoAPIError('Identificador de pagamento invalido.')
+    return _request_json('GET', f'https://api.mercadopago.com/v1/payments/{payment_id}', arena=arena)
 
 
-def buscar_pagamentos_por_referencia(external_reference):
+def buscar_pagamentos_por_referencia(external_reference, arena):
     query = urlencode({'external_reference': external_reference})
-    return _request_json('GET', f'https://api.mercadopago.com/v1/payments/search?{query}')
+    return _request_json('GET', f'https://api.mercadopago.com/v1/payments/search?{query}', arena=arena)

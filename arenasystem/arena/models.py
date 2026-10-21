@@ -330,6 +330,8 @@ class Mensalidade(models.Model):
         ('pago', 'Pago'),
         ('atrasado', 'Atrasado'),
         ('cancelada', 'Cancelada'),
+        ('estornada', 'Estornada'),
+        ('contestada', 'Contestada'),
     ]
     arena = models.ForeignKey(
         Arena,
@@ -349,11 +351,13 @@ class Mensalidade(models.Model):
     mercado_pago_preference_id = models.CharField(max_length=120, blank=True)
     mercado_pago_payment_id = models.CharField(max_length=120, blank=True)
     mercado_pago_checkout_url = models.URLField(blank=True)
+    checkout_expires_at = models.DateTimeField(null=True, blank=True)
     external_reference = models.CharField(max_length=120, blank=True, db_index=True)
     payment_provider = models.CharField(max_length=40, blank=True)
     external_status = models.CharField(max_length=80, blank=True)
     processed_at = models.DateTimeField(null=True, blank=True)
     idempotency_key = models.CharField(max_length=120, blank=True, db_index=True)
+    payment_checked_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-mes_referencia']
@@ -397,3 +401,33 @@ class PaymentWebhookEvent(models.Model):
 
     def __str__(self):
         return f'{self.provider}:{self.external_id}'
+
+
+class PaymentAccount(models.Model):
+    arena = models.OneToOneField(Arena, on_delete=models.CASCADE, related_name='payment_account')
+    collector_id = models.CharField(max_length=80, unique=True)
+    access_token_encrypted = models.TextField()
+    refresh_token_encrypted = models.TextField()
+    expires_at = models.DateTimeField()
+    connected_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    connected_at = models.DateTimeField(auto_now_add=True)
+    disconnected_at = models.DateTimeField(null=True, blank=True)
+
+
+class PaymentOAuthAttempt(models.Model):
+    arena = models.ForeignKey(Arena, on_delete=models.CASCADE)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    state_hash = models.CharField(max_length=64, unique=True)
+    verifier_encrypted = models.TextField()
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
+
+
+class StudentPayment(models.Model):
+    mensalidade = models.ForeignKey(Mensalidade, on_delete=models.PROTECT, related_name='payments')
+    provider_id = models.CharField(max_length=100, unique=True)
+    status = models.CharField(max_length=40)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    refunded_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    provider_updated_at = models.DateTimeField()
+    updated_at = models.DateTimeField(auto_now=True)

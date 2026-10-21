@@ -5,6 +5,8 @@ function Badge({ status, texto }) {
     pendente: 'bg-cyan-100 text-cyan-700 border-cyan-200',
     atrasado: 'bg-red-100 text-red-700 border-red-200',
     cancelada: 'bg-gray-100 text-gray-700 border-gray-200',
+    estornada: 'bg-slate-100 text-slate-700 border-slate-200',
+    contestada: 'bg-red-100 text-red-700 border-red-200',
     aberta: 'bg-blue-100 text-blue-700 border-blue-200',
     paga: 'bg-green-100 text-green-700 border-green-200',
   };

@@ -56,6 +56,7 @@ def validar_quadra_da_arena(arena, quadra):
 
 
 def validar_conflito_reserva(arena, quadra, data, hora_inicio, hora_fim, reserva_id=None):
+    Quadra.objects.select_for_update().get(pk=quadra.pk, arena=arena)
     reservas = ReservaQuadra.objects.select_for_update().filter(
         arena=arena,
         quadra=quadra,
@@ -99,7 +100,7 @@ class ReservaQuadraViewSet(FeatureEnabledMixin, viewsets.ModelViewSet):
     def get_permissions(self):
         if self.request.method in permissions.SAFE_METHODS:
             return [permissions.IsAuthenticated()]
-        if self.action in ['confirmar', 'destroy']:
+        if self.action in ['confirmar', 'destroy', 'update', 'partial_update']:
             return [require_permission('reservas.manage')()]
         return [permissions.IsAuthenticated()]
 
@@ -132,6 +133,7 @@ class ReservaQuadraViewSet(FeatureEnabledMixin, viewsets.ModelViewSet):
                 cliente_telefone=cliente_telefone,
                 valor=valor or serializer.validated_data.get('valor', 0),
                 criado_por=user,
+                status=serializer.validated_data.get('status', 'pendente') if self._can_manage() else 'pendente',
             )
             registrar_auditoria(self.request, arena, 'reserva.criada', reserva, novos=ReservaQuadraSerializer(reserva).data)
 
@@ -160,8 +162,12 @@ class ReservaQuadraViewSet(FeatureEnabledMixin, viewsets.ModelViewSet):
         return response
 
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def confirmar(self, request, pk=None):
         reserva = self.get_object()
+        validar_conflito_reserva(get_user_arena(request.user), reserva.quadra, reserva.data,
+                                reserva.hora_inicio, reserva.hora_fim, reserva_id=reserva.pk)
+        reserva = ReservaQuadra.objects.select_for_update().get(pk=reserva.pk)
         anterior = {'status': reserva.status}
         reserva.status = 'confirmada'
         reserva.save(update_fields=['status'])

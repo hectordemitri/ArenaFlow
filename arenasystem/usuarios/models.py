@@ -72,6 +72,15 @@ class UserPermissionOverride(models.Model):
         ordering = ['permission']
 
 
+class UserMFA(models.Model):
+    user = models.OneToOneField(Usuario, on_delete=models.CASCADE, related_name='mfa')
+    secret_encrypted = models.TextField()
+    enabled = models.BooleanField(default=False)
+    last_step = models.BigIntegerField(default=-1)
+    recovery_hashes = models.JSONField(default=list)
+    setup_expires_at = models.DateTimeField(null=True, blank=True)
+
+
 class UserInvitation(models.Model):
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     arena = models.ForeignKey('arena.Arena', on_delete=models.CASCADE, related_name='user_invitations')

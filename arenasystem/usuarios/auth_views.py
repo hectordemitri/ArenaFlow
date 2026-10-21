@@ -1,5 +1,6 @@
 from rest_framework import serializers
 import uuid
+from django.conf import settings
 
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
@@ -11,6 +12,7 @@ from .models import Usuario
 
 
 class LoginTokenObtainPairSerializer(TokenObtainPairSerializer):
+    otp_code = serializers.CharField(required=False, allow_blank=True, write_only=True)
     username = serializers.CharField(required=False, allow_blank=True)
     email = serializers.EmailField(required=False, allow_blank=True)
     login = serializers.CharField(required=False, allow_blank=True)
@@ -43,8 +45,20 @@ class LoginTokenObtainPairSerializer(TokenObtainPairSerializer):
             if usuario:
                 attrs[self.username_field] = usuario.get_username()
 
+        if not login:
+            raise serializers.ValidationError({'username': 'Informe seu usuario ou email.'})
         data = super().validate(attrs)
+        from .models import UserMFA
+        enabled = UserMFA.objects.filter(user=self.user, enabled=True).exists()
+        if enabled:
+            if not attrs.get('otp_code'):
+                raise AuthenticationFailed({'detail': 'Informe o codigo do autenticador.', 'code': 'mfa_required'})
+            from .mfa import verify_mfa
+            verify_mfa(self.user, attrs['otp_code'])
         refresh = RefreshToken(data['refresh'])
+        refresh['mfa_verified'] = enabled
+        data['access'], data['refresh'] = str(refresh.access_token), str(refresh)
+        data['mfa_setup_required'] = (settings.SUPERADMIN_REQUIRE_MFA and self.user.papel_efetivo == 'superadmin_saas' and not enabled)
         request = self.context.get('request')
         forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '') if request else ''
         ip_address = forwarded.split(',')[0].strip() if forwarded else request.META.get('REMOTE_ADDR') if request else None

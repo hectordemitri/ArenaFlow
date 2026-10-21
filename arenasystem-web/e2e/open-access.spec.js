@@ -22,7 +22,7 @@ test('membro solicita, recepção confirma e membro encerra o acesso livre', asy
     localStorage.setItem('access_token', 'e2e-access');
     localStorage.setItem('refresh_token', 'e2e-refresh');
   });
-  await page.route('http://127.0.0.1:8000/api/**', async (route) => {
+  await page.route('http://127.0.0.1:*/api/**', async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });

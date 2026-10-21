@@ -16,7 +16,7 @@ from usuarios.permissions import require_permission
 @api_view(['GET'])
 @permission_classes([require_permission('dashboard.view')])
 def metricas_gerais(request):
-    hoje = timezone.now().date()
+    hoje = timezone.localdate()
     arena = get_user_arena(request.user)
     inicio_mes = hoje.replace(day=1)
     ultimos_30 = hoje - timedelta(days=30)
@@ -28,7 +28,7 @@ def metricas_gerais(request):
 
     receita_loja = Venda.objects.filter(
         arena=arena,
-        status='paga', data__gte=inicio_mes
+        status='paga', data__date__gte=inicio_mes
     ).aggregate(t=Sum('total'))['t'] or 0
 
     inadimplencia = Mensalidade.objects.filter(
@@ -56,7 +56,7 @@ def metricas_gerais(request):
 @api_view(['GET'])
 @permission_classes([require_permission('dashboard.view')])
 def receita_mensal(request):
-    inicio = timezone.now().date() - timedelta(days=365)
+    inicio = timezone.localdate() - timedelta(days=365)
     arena = get_user_arena(request.user)
 
     mensalidades = (
@@ -69,7 +69,7 @@ def receita_mensal(request):
     )
     vendas = (
         Venda.objects
-        .filter(arena=arena, status='paga', data__gte=inicio)
+        .filter(arena=arena, status='paga', data__date__gte=inicio)
         .annotate(mes=TruncMonth('data'))
         .values('mes')
         .annotate(total=Sum('total'))

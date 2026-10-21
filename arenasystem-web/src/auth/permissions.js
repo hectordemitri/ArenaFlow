@@ -47,6 +47,7 @@ export function getRole(user) {
 
 export function can(user, permission) {
   const role = getRole(user);
+  if (permission.startsWith('saas.')) return role === 'superadmin_saas';
   const permissions = ROLE_PERMISSIONS[role] || [];
   return permissions.includes('*') || permissions.includes(permission);
 }

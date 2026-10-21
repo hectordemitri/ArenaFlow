@@ -187,9 +187,14 @@ class Venda(models.Model):
     status = models.CharField(max_length=20, choices=STATUS, default='aberta')
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     observacoes = models.TextField(blank=True)
+    request_key = models.CharField(max_length=80, blank=True)
 
     class Meta:
         ordering = ['-data']
+        constraints = [models.UniqueConstraint(
+            fields=['arena', 'cliente', 'request_key'], condition=~Q(request_key=''),
+            name='unique_order_request_per_customer',
+        )]
 
     def calcular_total(self):
         total = sum(item.subtotal() for item in self.itens.all())

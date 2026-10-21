@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db import transaction
 
 from arena.tenant import get_user_arena
 from .models import Categoria, Fornecedor, ItemVenda, LoteEstoque, MovimentacaoEstoque, Produto, Venda
@@ -69,6 +70,8 @@ class ProdutoSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         arena = arena_atual_serializer(self)
+        if self.instance and 'estoque' in attrs and attrs['estoque'] != self.instance.estoque:
+            raise serializers.ValidationError({'estoque': 'Use a operacao de ajuste para alterar o saldo.'})
         if arena:
             categoria = attrs.get('categoria') or getattr(self.instance, 'categoria', None)
             fornecedor = attrs.get('fornecedor') or getattr(self.instance, 'fornecedor', None)
@@ -80,6 +83,7 @@ class ProdutoSerializer(serializers.ModelSerializer):
 
 
 class ItemVendaSerializer(serializers.ModelSerializer):
+    quantidade = serializers.IntegerField(min_value=1, max_value=10000)
     produto_nome = serializers.CharField(source='produto.nome', read_only=True)
     subtotal = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
@@ -97,7 +101,7 @@ class ItemVendaSerializer(serializers.ModelSerializer):
 
 
 class VendaSerializer(serializers.ModelSerializer):
-    itens = ItemVendaSerializer(many=True)
+    itens = ItemVendaSerializer(many=True, allow_empty=False)
     cliente_nome = serializers.SerializerMethodField()
 
     class Meta:
@@ -108,11 +112,37 @@ class VendaSerializer(serializers.ModelSerializer):
     def get_cliente_nome(self, obj):
         return obj.cliente.get_full_name() or obj.cliente.username
 
+    @transaction.atomic
     def create(self, validated_data):
+        from usuarios.models import Usuario
+        from .stock import remove_stock
         itens_data = validated_data.pop('itens')
+        actor = validated_data['cliente']
+        Usuario.objects.select_for_update().get(pk=actor.pk)
+        request_key = self.context['request'].headers.get('X-Idempotency-Key', '')
+        if len(request_key) > 80:
+            raise serializers.ValidationError({'detail': 'Identificador de pedido invalido.'})
+        if request_key:
+            previous = Venda.objects.filter(arena=validated_data['arena'], cliente=actor, request_key=request_key).first()
+            if previous:
+                expected = sorted((item['produto'].pk, item['quantidade']) for item in itens_data)
+                stored = sorted(previous.itens.values_list('produto_id', 'quantidade'))
+                if expected != stored:
+                    raise serializers.ValidationError({'detail': 'Identificador ja utilizado em outro pedido.'})
+                return previous
+        product_ids = [item['produto'].pk for item in itens_data]
+        if len(product_ids) != len(set(product_ids)):
+            raise serializers.ValidationError({'itens': 'Agrupe as quantidades de cada produto em um unico item.'})
+        products = {p.pk: p for p in Produto.objects.select_for_update().filter(
+            pk__in=product_ids, arena=validated_data['arena'], ativo=True, canal__in=['app', 'ambos'],
+        ).order_by('pk')}
+        if len(products) != len(product_ids):
+            raise serializers.ValidationError({'itens': 'Um produto nao esta disponivel nesta loja.'})
+        validated_data['request_key'] = request_key
         venda = Venda.objects.create(**validated_data)
         for item_data in itens_data:
-            produto = item_data['produto']
+            produto = products[item_data['produto'].pk]
+            remove_stock(produto, item_data['quantidade'], 'venda_app', actor, f'Pedido #{venda.pk}')
             ItemVenda.objects.create(
                 arena=venda.arena,
                 venda=venda,

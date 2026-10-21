@@ -37,3 +37,15 @@ def process_access_integration_event(self, event_id):
 def expire_access_visits_task():
     from .access_services import expire_access_visits
     return expire_access_visits()
+
+
+@shared_task(name='arena.tasks.generate_student_dues')
+def generate_student_dues():
+    from .payments import generate_monthly_dues
+    return generate_monthly_dues()
+
+
+@shared_task(name='arena.tasks.reconcile_student_payments')
+def reconcile_student_payments_task():
+    from .payments import reconcile_student_payments
+    return reconcile_student_payments()

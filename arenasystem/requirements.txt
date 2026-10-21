@@ -13,3 +13,6 @@ drf-spectacular-sidecar==2024.7.1
 celery==5.5.3
 redis==6.4.0
 sentry-sdk>=2.20,<3
+cryptography>=44,<51
+django-storages[s3]>=1.14,<2
+pyotp>=2.9,<3

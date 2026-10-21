@@ -1,0 +1,11 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<div id="content-main">
+  <form method="post" action="{{ app_path }}">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="submit-row"><input type="submit" value="Entrar"></div>
+  </form>
+</div>
+{% endblock %}

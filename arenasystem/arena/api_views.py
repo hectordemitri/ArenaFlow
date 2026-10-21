@@ -23,7 +23,6 @@ from .services import (
     MercadoPagoConfigError,
     criar_dados_iniciais_arena,
     criar_preferencia_mensalidade,
-    obter_pagamento,
 )
 from .tenant import get_request_arena, get_user_arena
 from gestao.audit import registrar_auditoria
@@ -46,12 +45,8 @@ def arenas_publicas(request):
 
 
 def atualizar_mensalidades_atrasadas(qs=None):
-    hoje = timezone.localdate()
-    qs = qs or Mensalidade.objects.filter(arena__isnull=False)
-    return qs.filter(
-        status='pendente',
-        vencimento__lte=hoje - timezone.timedelta(days=5),
-    ).update(status='atrasado')
+    from .payments import update_overdue
+    return update_overdue(qs)
 
 
 class QuadraViewSet(viewsets.ReadOnlyModelViewSet):
@@ -359,12 +354,18 @@ class MensalidadeViewSet(viewsets.ReadOnlyModelViewSet):
         return qs
 
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def pagar(self, request, pk=None):
         mensalidade = self.get_object()
+        mensalidade = Mensalidade.objects.select_for_update().get(pk=mensalidade.pk)
         if mensalidade.status == 'pago':
             return Response({'detail': 'Esta mensalidade ja esta paga.'})
+        if mensalidade.status == 'cancelada':
+            return Response({'detail': 'Esta mensalidade foi cancelada.'}, status=409)
 
-        if mensalidade.mercado_pago_checkout_url:
+        if (mensalidade.mercado_pago_checkout_url and mensalidade.checkout_expires_at
+                and mensalidade.checkout_expires_at > timezone.now()
+                and mensalidade.status not in {'estornada', 'contestada'}):
             return Response({
                 'detail': 'Link de pagamento recuperado.',
                 'checkout_url': mensalidade.mercado_pago_checkout_url,
@@ -397,7 +398,7 @@ class AdminMensalidadeViewSet(viewsets.ModelViewSet):
         ).filter(arena=arena)
 
         status_filtro = self.request.query_params.get('status', 'todas')
-        if status_filtro in ['pendente', 'atrasado', 'pago', 'cancelada']:
+        if status_filtro in dict(Mensalidade.STATUS):
             qs = qs.filter(status=status_filtro)
 
         hoje = timezone.localdate()
@@ -478,48 +479,3 @@ class AdminMensalidadeViewSet(viewsets.ModelViewSet):
         mensalidade.save(update_fields=['status', 'data_pagamento'])
         registrar_auditoria(request, get_user_arena(request.user), 'mensalidade.cancelada_manual', mensalidade, anteriores=anterior, novos={'status': mensalidade.status})
         return Response({'detail': 'Mensalidade cancelada.'})
-
-
-@api_view(['POST', 'GET'])
-@permission_classes([permissions.AllowAny])
-def mercado_pago_webhook(request):
-    payment_id = (
-        request.query_params.get('data.id')
-        or request.query_params.get('id')
-        or request.data.get('data', {}).get('id')
-        or request.data.get('id')
-    )
-    topic = request.query_params.get('type') or request.data.get('type')
-
-    if topic and topic != 'payment':
-        return Response({'detail': 'Evento ignorado.'})
-    if not payment_id:
-        return Response({'detail': 'Sem payment_id.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    try:
-        pagamento = obter_pagamento(payment_id)
-    except (MercadoPagoConfigError, MercadoPagoAPIError) as exc:
-        return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-
-    external_reference = pagamento.get('external_reference')
-    mp_status = pagamento.get('status')
-    if not external_reference:
-        return Response({'detail': 'Pagamento sem external_reference.'})
-
-    mensalidade = Mensalidade.objects.filter(external_reference=external_reference).first()
-    if not mensalidade:
-        return Response({'detail': 'Mensalidade nao encontrada.'}, status=status.HTTP_404_NOT_FOUND)
-
-    mensalidade.mercado_pago_payment_id = str(pagamento.get('id', payment_id))
-    if mp_status == 'approved':
-        mensalidade.status = 'pago'
-        mensalidade.data_pagamento = timezone.localdate()
-    elif mp_status in ['rejected', 'cancelled', 'refunded', 'charged_back']:
-        mensalidade.atualizar_status_atraso(salvar=False)
-
-    mensalidade.save(update_fields=[
-        'mercado_pago_payment_id',
-        'status',
-        'data_pagamento',
-    ])
-    return Response({'detail': 'Webhook processado.'})

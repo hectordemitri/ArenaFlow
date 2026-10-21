@@ -21,6 +21,8 @@ __pycache__/
 *.db
 venv/
 .venv/
+.test-deps/
+backups/
 staticfiles/
 media/
 .pytest_cache/

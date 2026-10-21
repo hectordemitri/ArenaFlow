@@ -44,7 +44,7 @@ def get_default_arena():
         arena = Arena.objects.filter(slug=getattr(settings, 'DEFAULT_ARENA_SLUG', 'arenasystem-demo')).first()
         if not arena:
             raise ValidationError({'detail': 'Nenhuma arena padrao foi configurada para este ambiente.'})
-    if arena.nome.startswith('ArenaSystem') or arena.cor_primaria.lower() == '#123b5d' or _is_retired_warm_tone(arena.cor_primaria):
+    if getattr(settings, 'DEMO_MODE', False) and (arena.nome.startswith('ArenaSystem') or arena.cor_primaria.lower() == '#123b5d' or _is_retired_warm_tone(arena.cor_primaria)):
         arena.nome = 'ArenaFlow Demo'
         arena.cor_primaria = '#0F766E'
         arena.cor_secundaria = '#A3E635'
@@ -95,6 +95,8 @@ def get_user_arena(user):
 
     if getattr(user, 'is_authenticated', False) and getattr(user, 'arena_id', None):
         return user.arena
+    if getattr(user, 'is_authenticated', False):
+        raise PermissionDenied('Esta conta nao esta vinculada a uma arena.')
     return get_default_arena()
 
 
@@ -110,6 +112,8 @@ def get_request_arena(request):
 
     if getattr(user, 'is_authenticated', False) and getattr(user, 'arena_id', None):
         return user.arena
+    if getattr(user, 'is_authenticated', False):
+        raise PermissionDenied('Esta conta nao esta vinculada a uma arena.')
 
     host = request.get_host().split(':', 1)[0].lower() if request else ''
     if host:

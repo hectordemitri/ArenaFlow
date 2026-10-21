@@ -1,0 +1,66 @@
+# Create/populate the arenaflow-production environment group before deploy.
+# Use arenasystem/.env.example for keys; share the same encryption keys across services.
+services:
+  - type: web
+    name: arenaflow-api
+    runtime: python
+    rootDir: arenasystem
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py check --deploy --fail-level WARNING
+    preDeployCommand: python manage.py migrate --noinput
+    startCommand: gunicorn arenasystem.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    healthCheckPath: /api/health/ready/
+    autoDeploy: false
+    envVars:
+      - fromGroup: arenaflow-production
+      - key: DEBUG
+        value: 'False'
+      - key: DEMO_MODE
+        value: 'False'
+      - key: SUPERADMIN_REQUIRE_MFA
+        value: 'True'
+      - key: USE_X_FORWARDED_PROTO
+        value: 'True'
+      - key: SECURE_SSL_REDIRECT
+        value: 'True'
+      - key: SECURE_HSTS_SECONDS
+        value: '31536000'
+      - key: SECURE_HSTS_INCLUDE_SUBDOMAINS
+        value: 'True'
+      - key: SECURE_HSTS_PRELOAD
+        value: 'True'
+      - key: REDIS_URL
+        fromService: {type: keyvalue, name: arenaflow-redis, property: connectionString}
+  - type: worker
+    name: arenaflow-worker
+    runtime: python
+    rootDir: arenasystem
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A arenasystem worker --loglevel=info --concurrency=2
+    autoDeploy: false
+    envVars:
+      - fromGroup: arenaflow-production
+      - key: DEBUG
+        value: 'False'
+      - key: DEMO_MODE
+        value: 'False'
+      - key: REDIS_URL
+        fromService: {type: keyvalue, name: arenaflow-redis, property: connectionString}
+  - type: worker
+    name: arenaflow-scheduler
+    runtime: python
+    rootDir: arenasystem
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A arenasystem beat --loglevel=info
+    autoDeploy: false
+    envVars:
+      - fromGroup: arenaflow-production
+      - key: DEBUG
+        value: 'False'
+      - key: DEMO_MODE
+        value: 'False'
+      - key: REDIS_URL
+        fromService: {type: keyvalue, name: arenaflow-redis, property: connectionString}
+  - type: keyvalue
+    name: arenaflow-redis
+    plan: starter
+    ipAllowList: []

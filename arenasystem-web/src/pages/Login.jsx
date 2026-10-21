@@ -13,6 +13,8 @@ const DEMO_STUDENT_USERNAME = import.meta.env.VITE_DEMO_STUDENT_USERNAME || 'dem
 function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
   const navigate = useNavigate();
@@ -32,7 +34,7 @@ function Login() {
         username: credenciais.username?.trim(),
         email: credenciais.email?.trim(),
         login: credenciais.login?.trim(),
-        password: credenciais.password?.trim(),
+        password: credenciais.password,
       };
 
       const { data } = await api.post('/auth/login/', payload);
@@ -40,11 +42,15 @@ function Login() {
       localStorage.setItem('refresh_token', data.refresh);
 
       const { data: usuario } = await api.get('/usuarios/me/');
-      navigate(initialPathFor(usuario));
+      navigate(data.mfa_setup_required ? '/seguranca' : initialPathFor(usuario));
     } catch (err) {
       const dados = err.response?.data;
+      if (dados?.code === 'mfa_required') setMfaRequired(true);
       const detalhe = dados?.detail || dados?.username?.[0] || dados?.password?.[0];
-      setErro(detalhe || 'Usuario ou senha incorretos.');
+      setErro(detalhe || (!err.response
+        ? 'Nao foi possivel conectar ao servidor. Verifique sua conexao e tente novamente.'
+        : err.response.status >= 500 ? 'O servidor esta indisponivel. Tente novamente em instantes.'
+          : 'Nao foi possivel concluir o login. Confira os dados informados.'));
     } finally {
       setCarregando(false);
     }
@@ -52,7 +58,7 @@ function Login() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    void autenticar({ username, password });
+    void autenticar({ username, password, otp_code: otpCode });
   };
 
   const prepararDemo = (tipo) => {
@@ -156,6 +162,9 @@ function Login() {
                 />
               </label>
 
+              {mfaRequired && <label className="block"><span className="mb-1 block text-sm font-medium text-gray-700">Codigo do autenticador ou de recuperacao</span>
+                <input autoComplete="one-time-code" value={otpCode} onChange={(event) => setOtpCode(event.target.value)} required
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5" autoFocus /></label>}
               {erro && (
                 <div className="rounded border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-700">
                   {erro}

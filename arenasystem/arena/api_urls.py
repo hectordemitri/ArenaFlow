@@ -11,8 +11,8 @@ from .api_views import (
     SaasArenaViewSet,
     arena_atual,
     arenas_publicas,
-    mercado_pago_webhook,
 )
+from .payment_views import mercado_pago_webhook, payment_account, payment_oauth_callback, payment_oauth_authorize
 from .onboarding_views import (
     complete_onboarding, import_students, onboarding_status, save_onboarding_step,
     student_import_template,
@@ -37,6 +37,10 @@ urlpatterns = [
     path('admin/access/settings/', access_settings, name='access-settings'),
     path('arenas/publicas/', arenas_publicas, name='arenas-publicas'),
     path('mercado-pago/webhook/', mercado_pago_webhook, name='mercado-pago-webhook'),
+    path('mercado-pago/webhook/<int:arena_id>/', mercado_pago_webhook, name='mercado-pago-arena-webhook'),
+    path('mercado-pago/callback/', payment_oauth_callback, name='mercado-pago-callback'),
+    path('mercado-pago/authorize/', payment_oauth_authorize, name='mercado-pago-authorize'),
+    path('admin/payment-account/', payment_account, name='payment-account'),
     path('onboarding/', onboarding_status, name='onboarding-status'),
     path('onboarding/steps/<slug:step>/', save_onboarding_step, name='onboarding-save-step'),
     path('onboarding/complete/', complete_onboarding, name='onboarding-complete'),

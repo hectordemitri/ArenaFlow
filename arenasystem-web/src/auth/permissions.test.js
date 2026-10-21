@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adminNavigationFor } from './permissions';
+import { adminNavigationFor, can } from './permissions';
 
 const academyTerms = {
   pessoa_singular: 'membro',
@@ -9,6 +9,12 @@ const academyTerms = {
 };
 
 describe('adminNavigationFor', () => {
+  it('reserva as telas SaaS ao superadmin mesmo quando o dono possui acesso total a arena', () => {
+    expect(can({ papel_efetivo: 'dono' }, 'saas.manage')).toBe(false);
+    expect(can({ papel_efetivo: 'superadmin_saas' }, 'saas.manage')).toBe(true);
+    const items = adminNavigationFor({ papel_efetivo: 'dono' });
+    expect(items.some((item) => ['saas', 'saasops'].includes(item.key))).toBe(false);
+  });
   it('aplica terminologia da academia sem alterar as rotas legadas', () => {
     const items = adminNavigationFor(
       { papel_efetivo: 'dono' },

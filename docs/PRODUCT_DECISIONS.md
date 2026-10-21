@@ -33,6 +33,8 @@ Estados preservados do backend:
 - `pago`: mensalidade paga. Mantido por compatibilidade, exibido como "Pago".
 - `atrasado`: calculado no backend quando `hoje >= vencimento + 5 dias`.
 - `cancelada`: mensalidade cancelada manualmente por perfil autorizado.
+- `estornada`: pagamento devolvido total ou parcialmente, sem baixa integral confirmada.
+- `contestada`: pagamento contestado ou em mediacao, sem outro pagamento integral aprovado.
 
 Preparacao para pagamentos futuros:
 
@@ -43,7 +45,10 @@ Preparacao para pagamentos futuros:
 - `idempotency_key`
 - `PaymentWebhookEvent`
 
-Mercado Pago real depende de credenciais, validacao de webhook e decisao de infraestrutura.
+O webhook de alunos valida assinatura e consulta o pagamento com a conta OAuth
+da arena; valor, BRL, referencia e recebedor sao verificados. Credenciais ficam
+criptografadas e separadas das cobrancas SaaS. A homologacao externa depende das
+contas de teste, das credenciais da aplicacao e da infraestrutura publica.
 
 ## Indicadores do dashboard
 

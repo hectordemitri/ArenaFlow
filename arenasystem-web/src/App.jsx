@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
 import { CarrinhoProvider } from './contexts/CarrinhoProvider';
 import { ArenaContextProvider } from './contexts/ArenaContext';
 
@@ -26,18 +27,16 @@ import PerfilDados from './pages/PerfilDados';
 import PerfilNotificacoes from './pages/PerfilNotificacoes';
 import PerfilSeguranca from './pages/PerfilSeguranca';
 import PerfilSessoes from './pages/PerfilSessoes';
+import MfaSettings from './components/MfaSettings';
 import ProfessorCheckins from './pages/ProfessorCheckins';
 
 // Admin
 import LayoutAdmin from './components/admin/LayoutAdmin';
-import DashboardAdmin from './pages/admin/DashboardAdmin';
 import AdminSolicitacoes from './pages/admin/Solicitacoes';
 import FilaEspera from './pages/admin/FilaEspera';
 import Alunos from './pages/admin/Alunos';
 import MensalidadesAdmin from './pages/admin/MensalidadesAdmin';
-import Estoque from './pages/admin/Estoque';
 import TurmasQuadras from './pages/admin/TurmasQuadras';
-import GestaoAvancada from './pages/admin/GestaoAvancada';
 import Auditoria from './pages/admin/Auditoria';
 import SaasArenas from './pages/admin/SaasArenas';
 import SaasArenaDetalhe from './pages/admin/SaasArenaDetalhe';
@@ -53,11 +52,16 @@ import RotaAppAluno from './components/RotaAppAluno';
 import CheckinsAdmin from './pages/admin/CheckinsAdmin';
 import PlanosMembros from './pages/admin/PlanosMembros';
 
+const DashboardAdmin = lazy(() => import('./pages/admin/DashboardAdmin'));
+const Estoque = lazy(() => import('./pages/admin/Estoque'));
+const GestaoAvancada = lazy(() => import('./pages/admin/GestaoAvancada'));
+
 function App() {
   return (
     <CarrinhoProvider>
       <ArenaContextProvider>
         <BrowserRouter>
+        <Suspense fallback={<p role="status" className="p-6 text-slate-500">Carregando...</p>}>
         <Routes>
           {/* Públicas */}
           <Route path="/login" element={<Login />} />
@@ -67,6 +71,7 @@ function App() {
           <Route path="/recuperar-senha" element={<RecuperarSenha />} />
           <Route path="/redefinir-senha" element={<RecuperarSenha confirm />} />
           <Route path="/confirmar-email" element={<ConfirmarEmail />} />
+          <Route path="/seguranca" element={<main className="mx-auto max-w-xl px-4 py-12"><h1 className="mb-6 text-2xl font-bold">Seguranca da conta ArenaFlow</h1><MfaSettings /></main>} />
 
           {/* App do aluno */}
           <Route path="/" element={<Navigate to="/app" replace />} />
@@ -118,6 +123,7 @@ function App() {
             <Route path="saas/arenas/:arenaId" element={<RotaAdminPermissao permission="saas.manage"><SaasArenaDetalhe /></RotaAdminPermissao>} />
           </Route>
         </Routes>
+        </Suspense>
         </BrowserRouter>
       </ArenaContextProvider>
     </CarrinhoProvider>
