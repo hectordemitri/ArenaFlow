@@ -1,29 +1,60 @@
 # ArenaFlow
 
-ArenaFlow é uma plataforma SaaS multi-tenant para a gestão de arenas esportivas e academias. O projeto reúne operação administrativa, experiência mobile instalável, cobrança, auditoria e isolamento de dados por unidade.
+O ArenaFlow é um projeto de portfólio para organizar o dia a dia de arenas esportivas e academias. A ideia é reunir matrículas, turmas, reservas, mensalidades e estoque em um sistema, com uma área para a administração e outra para os alunos.
 
-> Projeto de portfólio desenvolvido com apoio intensivo de inteligência artificial. As decisões de produto, revisão, testes e evolução do código fazem parte do trabalho apresentado neste repositório.
+**Em desenvolvimento:** o projeto já permite demonstrar os principais fluxos, mas ainda precisa de validação em uma operação real antes de uso comercial.
+
+## Conheça as telas
+
+As capturas abaixo foram feitas em um ambiente separado, com dados totalmente fictícios. Os valores, nomes e cadastros são exemplos de demonstração, não resultados de uma empresa real.
+
+### Visão geral da administração
+
+Indicadores de receita, mensalidades, frequência e ocupação das quadras.
+
+![Visão geral do ArenaFlow com indicadores e gráficos de demonstração](docs/images/01-visao-geral.png)
+
+### Controle de estoque
+
+Produtos de balcão, alertas de reposição, lotes, validade e registro de vendas.
+
+![Estoque do ArenaFlow com produtos fictícios e alertas de reposição](docs/images/02-controle-de-estoque.png)
+
+### Área do aluno no celular
+
+Próxima aula, acompanhamento de check-in e acesso a turmas, pagamentos e reservas.
+
+<img src="docs/images/03-app-do-aluno.png" alt="Área do aluno no celular com uma aula de demonstração e atalhos da rotina" width="430">
+
+## Sobre este projeto
+
+O ArenaFlow é parte do meu portfólio e um espaço para estudar como as diferentes partes de uma aplicação funcionam juntas.
+
+Utilizo ferramentas de inteligência artificial como apoio no desenvolvimento. Minha participação inclui definir as necessidades do produto, testar os fluxos como usuário, identificar problemas e acompanhar as correções e a evolução do sistema. O projeto também é uma oportunidade de aprofundar meu entendimento do código, das tecnologias utilizadas e das decisões tomadas.
 
 ## Principais recursos
 
-- Multi-tenancy por unidade, com suporte a arenas e academias.
-- Painel administrativo responsivo com terminologia e identidade configuráveis.
-- PWA para alunos e membros, instalável em Android e iPhone.
-- Check-in de aulas com validação pela recepção ou professor.
-- Acesso livre para academias, com confirmação, check-out e limites do plano.
-- Turmas, reservas, mensalidades, estoque, usuários e permissões.
-- Operação SaaS com planos, assinaturas, faturas, trial, carência e auditoria.
-- Modo superadmin com acesso assistido e logs cross-tenant.
-- Onboarding, convites, recuperação de senha, suporte e infraestrutura LGPD.
-- Tarefas assíncronas com Celery e preparação para PostgreSQL, Redis e deploy.
+- Turmas, matrículas, fila de espera e solicitações de cancelamento.
+- Check-in por aluno, turma e dia, com validação pela equipe.
+- Reservas de quadras e acompanhamento de manutenções.
+- Mensalidades, vencimentos e acompanhamento financeiro.
+- Estoque de balcão, fornecedores, lotes, validade e loja no aplicativo.
+- Área do aluno adaptada ao celular e instalável como aplicativo web (PWA).
+- Acesso livre para academias, com confirmação de entrada e registro de saída.
+- Diferentes arenas no mesmo sistema, com identidade visual, dados e permissões por unidade.
+- Gestão de equipe, convites, recuperação de senha e registros de auditoria.
+
+O código também inclui integração com Mercado Pago e ferramentas de operação do SaaS. Integrações externas dependem de configuração e homologação; sua presença no repositório não significa que estejam validadas em produção.
 
 ## Tecnologias
 
-**Backend:** Python, Django, Django REST Framework, Simple JWT, Celery, PostgreSQL/SQLite e Gunicorn.
+**Principais:** Python, Django, Django REST Framework, React, Vite e Tailwind CSS.
 
-**Frontend:** React, Vite, Tailwind CSS, Vitest e Playwright.
+**Dados e tarefas:** SQLite no desenvolvimento, suporte a PostgreSQL e tarefas assíncronas com Celery e Redis.
 
-**Infraestrutura preparada:** Supabase/PostgreSQL, Render, Vercel, Redis, WhiteNoise e Sentry opcional.
+**Testes:** Django, Vitest e Playwright. A cada atualização, o GitHub executa testes de backend, frontend e navegação, além de auditorias de dependências.
+
+As configurações e os cuidados de implantação estão no [roteiro de deploy](docs/DEPLOY_RUNBOOK.md).
 
 ## Estrutura
 
@@ -31,14 +62,16 @@ ArenaFlow é uma plataforma SaaS multi-tenant para a gestão de arenas esportiva
 arenasystem/       Backend Django e APIs
 arenasystem-web/   Frontend React e PWA
 docs/              Decisões, operação e roteiros de validação
+docs/images/       Prints com dados fictícios para apresentação
 render.yaml        Blueprint de infraestrutura sem segredos
+render.production.yaml  Configuração preparada para produção
 ```
 
 ## Execução local
 
 ### Backend
 
-```bash
+```powershell
 cd arenasystem
 python -m venv venv
 # Windows: venv\Scripts\activate
@@ -50,7 +83,7 @@ python manage.py runserver
 
 ### Frontend
 
-```bash
+```powershell
 cd arenasystem-web
 npm install
 copy .env.example .env
